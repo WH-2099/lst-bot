@@ -1,5 +1,8 @@
 # lst-bot
 
+[![Steam](https://img.shields.io/badge/Steam-000000?logo=steam&logoColor=white)](https://steamcommunity.com/groups/lst99)
+[![Discord](https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white)](https://discord.gg/4N3aeNsFt8)
+
 English | [简体中文](README.zh-Hans.md)
 
 `lst-bot` is a general-purpose IM bot for the **LST** player community.

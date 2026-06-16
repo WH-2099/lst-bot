@@ -1,5 +1,8 @@
 # lst-bot
 
+[![Steam](https://img.shields.io/badge/Steam-000000?logo=steam&logoColor=white)](https://steamcommunity.com/groups/lst99)
+[![Discord](https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white)](https://discord.gg/4N3aeNsFt8)
+
 [English](README.md) | 简体中文
 
 `lst-bot` 是一个给 Let's Starve Together 玩家群体用的通用 IM 机器人。
