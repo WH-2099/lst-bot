@@ -5,6 +5,9 @@ class Platform(Flag):
     Steam = 0b000001
     PSN = 0b000010
     Rail = 0b000100
+    # QQGAME is defunct; Klei moved users to TGP/WeGame, now queried as Rail.
+    # https://forums.kleientertainment.com/forums/topic/115578-retrieving-dst-server-data/#findComment-1306033
+    # QQGame = 0b001000
     XBone = 0b010000
     Switch = 0b100000
 
