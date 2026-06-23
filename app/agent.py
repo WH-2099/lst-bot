@@ -2,46 +2,73 @@ from __future__ import annotations
 
 from typing import Any, Final
 
-from fastmcp.client import Client as FastMCPClient
-from fastmcp.client.transports import SSETransport, StreamableHttpTransport
-from fastmcp.mcp_config import infer_transport_type_from_url
-from httpx import AsyncClient
+from fastmcp.client.transports import StreamableHttpTransport
+from google.genai.types import ContentUnionDict, GenerateContentConfigDict
+from httpx import AsyncClient, Auth, Timeout
 from pydantic import SecretStr
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.mcp import MCPToolset
-from pydantic_ai.models.google import GoogleModel
+from pydantic_ai.messages import ModelMessage
+from pydantic_ai.models import ModelRequestParameters
+from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
 from pydantic_ai.native_tools import WebSearchTool
 from pydantic_ai.providers.google import GoogleProvider
+from pydantic_ai.toolsets import AbstractToolset
 
 GEMINI_MODEL: Final = "gemini-3.5-flash"
 DOSU_API_KEY_HEADER: Final = "X-Dosu-API-Key"
+DOSU_MCP_TOOL_NAMES: Final = frozenset({"ask"})
 REQUEST_TIMEOUT: Final = 600
 
 DST_AGENT_INSTRUCTIONS: Final = """\
-你是《饥荒联机版》（Don't Starve Together）的问答助手。
-你有一套 Dosu MCP 工具，其主要能力是根据 DST lua 脚本代码进行初步查询。
-你也可以使用 Gemini 内置搜索补充公开网页信息。
+你是《饥荒联机版》（Don't Starve Together）的问答助手，你的名字叫拾什。
+你可以使用这些工具：
+- google_search：查询公开网页信息，成本更低且速度更快，适合优先使用。
+  用它补充 Klei 公告、版本更新、近期改动、社区资料，也用它寻找
+  DST Lua 代码实体标识符，例如 prefab、component、stategraph、action、
+  recipe、tuning、event、function、constant 或文件路径。
+- ask：跨已索引的数据源提问，并综合多个来源给出带引用的答案。
+  背后的主要资料是 DST 游戏 Lua 脚本代码。为了获得更好的结果，
+  提问应尽量包含具体 Lua 代码实体标识符，并把问题写成清晰的代码语境。
+  省略 data_source_ids 参数。
 
-流程必须严格遵守：
-1. 把用户问题补全为完整、清晰的 DST 语境问题（最好明确包含 lua 代码标识符）。
-2. 调用 Dosu MCP 的 ask 工具，用补全后的问题寻求答案。
-3. 如果 ask 工具结果不足，或问题需要最新公开信息，再使用 Gemini 内置搜索补充核对。
-4. 基于工具结果给出最终回复；如果工具结果仍不足，明确说明不确定。
+工具使用策略：
+- 简单稳定的问题可以直接回答；其他问题通常先用 google_search 获取公开线索。
+- 复杂机制、代码实现、模组开发或服务器配置问题，在调用 ask 前，先用
+  google_search 和推理明确问题描述，尽量找出相关 Lua 实体标识符。
+- 当问题已经有清晰代码实体，或需要从游戏 Lua 脚本代码中综合确认时，调用 ask。
+- 工具结果不足或互相冲突时说明不确定，并区分 Lua 代码索引结论和公开资料结论。
+
+解释方式：
+- 最终回答参照费曼学习法：先用一句话给结论，再用玩家熟悉的游戏现象解释原因。
+- 默认读者不了解 Lua、prefab、component、stategraph 等代码概念；必须先讲白话，
+  再在确有必要时补充代码名或服务器配置名。
+- 解释复杂机制时按“它是什么、为什么会这样、玩家该怎么做或怎么验证”的顺序写。
+- 避免堆叠代码细节；只保留能帮助判断、操作或避免误解的关键依据。
 
 回答要求：
-- 简体中文，不超过 500 字，不使用 markdown 标记，用基本的空格和换行排版。
+- 不超 500 字的中文（在不影响语义的前提下尽可能简短）。
+- 不用 markdown 标记，只用基本的空格和换行排版。
 - 语气友好接地气，但不要客套和招呼。
 - 不编造版本机制、角色数值、代码或服务器配置。
 """
 
-USER_PROMPT_TEMPLATE: Final = """\
-用户原始问题：
-{question}
 
-请先根据《饥荒联机版》的基础背景补全这个问题，\
-再调用 ask 工具获取答案，最后回复用户。
-"""
+class DstGoogleModel(GoogleModel):
+    async def _build_content_and_config(
+        self,
+        messages: list[ModelMessage],
+        model_settings: GoogleModelSettings,
+        model_request_parameters: ModelRequestParameters,
+    ) -> tuple[list[ContentUnionDict], GenerateContentConfigDict]:
+        contents, config = await super()._build_content_and_config(
+            messages,
+            model_settings,
+            model_request_parameters,
+        )
+        config["automatic_function_calling"] = {"disable": True}
+        return contents, config
 
 
 class DstQuestionAgent:
@@ -60,77 +87,72 @@ class DstQuestionAgent:
 
     async def answer(self, question: str) -> str:
         proxy = self._http_proxy or None
+
         async with AsyncClient(
-            proxy=proxy,
-            timeout=REQUEST_TIMEOUT,
+            proxy=proxy, timeout=REQUEST_TIMEOUT
         ) as google_http_client:
-            model = GoogleModel(
+            model = DstGoogleModel(
                 GEMINI_MODEL,
                 provider=GoogleProvider(
                     api_key=self._gemini_api_key.get_secret_value(),
                     http_client=google_http_client,
                 ),
             )
-            dosu_client = FastMCPClient(
-                self._dosu_transport(
-                    api_key=self._dosu_api_key.get_secret_value(),
-                    proxy=proxy,
-                ),
-                timeout=REQUEST_TIMEOUT,
-                init_timeout=REQUEST_TIMEOUT,
-            )
-            dosu_tools = MCPToolset(dosu_client)
             agent = Agent(
                 model,
                 instructions=DST_AGENT_INSTRUCTIONS,
-                toolsets=[dosu_tools],
+                toolsets=[self._dosu_tools(proxy=proxy)],
                 capabilities=[NativeTool(WebSearchTool())],
             )
             async with agent:
-                result = await agent.run(
-                    USER_PROMPT_TEMPLATE.format(question=question),
-                )
+                result = await agent.run(question)
 
         return result.output
 
-    def _dosu_transport(
-        self,
-        *,
-        api_key: str,
-        proxy: str | None,
-    ) -> SSETransport | StreamableHttpTransport:
-        httpx_client_factory = self._mcp_http_client_factory(
-            api_key=api_key,
-            proxy=proxy,
-        )
-        if infer_transport_type_from_url(self._dosu_mcp_endpoint) == "sse":
-            return SSETransport(
+    def _dosu_tools(self, *, proxy: str | None) -> AbstractToolset[Any]:
+        headers = {
+            DOSU_API_KEY_HEADER: self._dosu_api_key.get_secret_value(),
+        }
+
+        if proxy is None:
+            toolset = MCPToolset(
                 self._dosu_mcp_endpoint,
-                httpx_client_factory=httpx_client_factory,
+                headers=headers,
+                init_timeout=REQUEST_TIMEOUT,
+                read_timeout=REQUEST_TIMEOUT,
             )
-        return StreamableHttpTransport(
-            self._dosu_mcp_endpoint,
-            httpx_client_factory=httpx_client_factory,
+        else:
+
+            def http_client_factory(
+                headers: dict[str, str] | None = None,
+                timeout: Timeout | None = None,
+                auth: Auth | None = None,
+                **kwargs: Any,
+            ) -> AsyncClient:
+                if timeout is not None:
+                    kwargs["timeout"] = timeout
+                if auth is not None:
+                    kwargs["auth"] = auth
+
+                return AsyncClient(
+                    **kwargs,
+                    proxy=proxy,
+                    headers=headers or {},
+                )
+
+            toolset = MCPToolset(
+                StreamableHttpTransport(
+                    self._dosu_mcp_endpoint,
+                    headers=headers,
+                    httpx_client_factory=http_client_factory,
+                ),
+                init_timeout=REQUEST_TIMEOUT,
+                read_timeout=REQUEST_TIMEOUT,
+            )
+
+        return toolset.filtered(
+            lambda _, tool_def: tool_def.name in DOSU_MCP_TOOL_NAMES,
         )
-
-    @staticmethod
-    def _mcp_http_client_factory(
-        *,
-        api_key: str,
-        proxy: str | None,
-    ) -> Any:
-        def factory(
-            *,
-            headers: dict[str, str] | None = None,
-            **kwargs: Any,
-        ) -> AsyncClient:
-            return AsyncClient(
-                **kwargs,
-                proxy=proxy,
-                headers={**(headers or {}), DOSU_API_KEY_HEADER: api_key},
-            )
-
-        return factory
 
 
 __all__ = ["DstQuestionAgent"]
