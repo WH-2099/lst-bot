@@ -1,0 +1,21 @@
+[project]
+name = "bot"
+version = "0.0.0"
+description = "Base bot framework package for lst-bot."
+license = "MIT"
+requires-python = ">=3.14"
+dependencies = [
+    "croniter>=6.2.2",
+    "diwire>=1.4.2",
+    "logbook>=1.9.2",
+    "orjson>=3.11.9",
+    "pydantic>=2.13.4",
+    "python-ulid>=3.1.0",
+    "robyn[pydantic]>=0.84.0",
+    "urllib3-future>=2.21.902",
+    "websockets>=16.0",
+]
+
+[build-system]
+requires = ["uv_build~=0.11"]
+build-backend = "uv_build"

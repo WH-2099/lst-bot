@@ -9,7 +9,7 @@ English | [简体中文](README.zh-Hans.md)
 
 ![LST logo](https://pub.starv.ing/logo.png)
 
-**Let's Starve Together (LST)** is a community formed around *Don't Starve Together (DST)*. The repository contains the LST bot app and an embedded async bot framework. `app/` holds the current bot behavior, while `src/lst_bot/` handles OneBot ingress, event dispatch, dependency injection, scheduled jobs, and action execution.
+**Let's Starve Together (LST)** is a community formed around *Don't Starve Together (DST)*. The repository contains the LST bot app, a reusable async bot package, and standalone client packages. `src/lst_bot/` holds the current bot behavior, while `pkgs/bot/` handles OneBot ingress, event dispatch, dependency injection, scheduled jobs, and action execution.
 
 ## What It Does
 
@@ -26,7 +26,7 @@ flowchart LR
     QQ[QQ Group] <--> NapCat[NapCat / OneBot 11]
     NapCat <--> Bot[lst-bot app]
 
-    Bot --> Framework[lst_bot framework]
+    Bot --> Framework[bot package]
     Framework --> Router[Routing / Permission / DI]
     Framework --> Scheduler[cron scheduler]
     Framework --> Gateway[OneBot gateway]
@@ -40,15 +40,18 @@ flowchart LR
 
 ## Layout
 
-- `app/`: bot entrypoint, runtime settings, DST question agent, and systemd files.
-- `app/systemd/`: NapCat container and lst-bot service units.
-- `src/lst_bot/`: embedded bot framework.
-- `src/lst_bot/clients/`: Klei, local DST control, Hitokoto, and related clients.
-- `tests/`: protocol, routing, gateway, and client tests.
+- `pkgs/bot/`: standalone async bot framework package.
+- `pkgs/hitokoto/`: standalone Hitokoto client package.
+- `pkgs/klei/`: standalone Klei lobby, version, and forum client package.
+- `pkgs/lst/`: standalone local DST room control client package.
+- `src/lst_bot/`: bot entrypoint, runtime settings, and DST question agent.
+- `systemd/`: NapCat container and lst-bot service units.
+- `tests/`: root app tests.
+- Package tests live beside their owning packages.
 
 ## Configuration
 
-The app reads `.env` from its working directory. Development and deployment both run from `app/`, so the usual location is `app/.env`.
+The app reads `.env` from its working directory. Development and deployment both run from the repository root, so the usual location is `.env`.
 
 Core settings:
 
@@ -69,8 +72,8 @@ Core settings:
 
 ## Development
 
-- `just sync`: sync dependencies and install hooks.
-- `just dev`: start the bot from `app/main.py`.
+- `just sync`: sync all workspace packages and install hooks.
+- `just dev`: start the bot app package.
 - `just check`: run CI-style checks.
 - `just test`: run the full test pipeline.
 - `just build`: check and build the package.
@@ -79,15 +82,15 @@ Core settings:
 
 The default paths are `/srv/lst-bot` and `/srv/napcat`.
 
-`app/systemd/napcat.container` is a Podman Quadlet file. It generates `napcat.service` and stores NapCat config plus QQ data under `/srv/napcat/config` and `/srv/napcat/ntqq`.
+`systemd/napcat.container` is a Podman Quadlet file. It generates `napcat.service` and stores NapCat config plus QQ data under `/srv/napcat/config` and `/srv/napcat/ntqq`.
 
-`app/systemd/lst-bot.service` starts the bot from `/srv/lst-bot/app` after `napcat.service`.
+`systemd/lst-bot.service` starts the bot from `/srv/lst-bot` after `napcat.service`.
 
 Deployment checklist:
 
 1. Place the repository at `/srv/lst-bot` and run `just sync`.
 2. Enable the NapCat container and make sure its OneBot 11 WebSocket is reachable.
-3. Fill `app/.env` with OneBot, Klei, Gemini, Dosu, and report-group settings.
+3. Fill `.env` with OneBot, Klei, Gemini, Dosu, and report-group settings.
 4. For room management, provide local `dst@<room>.service` units.
 5. Make sure the service user can control lst-bot, NapCat, and DST room units.
 

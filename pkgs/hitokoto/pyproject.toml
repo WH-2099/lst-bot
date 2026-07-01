@@ -1,0 +1,16 @@
+[project]
+name = "hitokoto"
+version = "0.0.0"
+description = "Hitokoto client for lst-bot."
+license = "MIT"
+requires-python = ">=3.14"
+dependencies = [
+    "apsw>=3.53.2.0",
+    "logbook>=1.9.2",
+    "pydantic>=2.13.4",
+    "urllib3-future>=2.21.902",
+]
+
+[build-system]
+requires = ["uv_build~=0.11"]
+build-backend = "uv_build"

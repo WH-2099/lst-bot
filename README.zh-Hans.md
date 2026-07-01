@@ -9,7 +9,7 @@
 
 ![LST logo](https://pub.starv.ing/logo.png)
 
-Let's Starve Together（LST）是围绕《饥荒联机版》（Don't Starve Together, DST）形成的自发游戏群体。仓库由 LST 机器人应用和内置异步机器人框架组成。`app/` 承载当前业务实现，`src/lst_bot/` 负责 OneBot 接入、事件分发、依赖注入、定时任务和动作执行。
+Let's Starve Together（LST）是围绕《饥荒联机版》（Don't Starve Together, DST）形成的自发游戏群体。仓库由 LST 机器人应用、可复用异步 bot 包和独立客户端包组成。`src/lst_bot/` 承载当前业务实现，`pkgs/bot/` 负责 OneBot 接入、事件分发、依赖注入、定时任务和动作执行。
 
 ## 它会做什么
 
@@ -26,7 +26,7 @@ flowchart LR
     QQ[QQ 群] <--> NapCat[NapCat / OneBot 11]
     NapCat <--> Bot[lst-bot app]
 
-    Bot --> Framework[lst_bot 框架]
+    Bot --> Framework[bot 包]
     Framework --> Router[事件路由 / 权限 / DI]
     Framework --> Scheduler[cron 定时任务]
     Framework --> Gateway[OneBot 网关]
@@ -40,15 +40,18 @@ flowchart LR
 
 ## 目录
 
-- `app/`：机器人业务入口、配置、问答 Agent 和 systemd 部署文件。
-- `app/systemd/`：NapCat 容器和 lst-bot 服务。
-- `src/lst_bot/`：项目内置机器人框架。
-- `src/lst_bot/clients/`：Klei、DST 本地控制、一言等客户端。
-- `tests/`：协议、路由、网关和客户端测试。
+- `pkgs/bot/`：独立的异步 bot 框架包。
+- `pkgs/hitokoto/`：独立的一言客户端包。
+- `pkgs/klei/`：独立的 Klei 大厅、版本和论坛客户端包。
+- `pkgs/lst/`：独立的本机 DST 房间控制客户端包。
+- `src/lst_bot/`：机器人业务入口、配置和问答 Agent。
+- `systemd/`：NapCat 容器和 lst-bot 服务。
+- `tests/`：根应用测试。
+- 各 package 的测试放在对应 package 旁边。
 
 ## 配置
 
-应用从运行目录读取 `.env`。开发和部署都以 `app/` 作为工作目录，所以通常放在 `app/.env`。
+应用从运行目录读取 `.env`。开发和部署都以仓库根目录作为工作目录，所以通常放在 `.env`。
 
 核心配置：
 
@@ -69,8 +72,8 @@ flowchart LR
 
 ## 开发
 
-- `just sync`：同步依赖并安装 hooks。
-- `just dev`：从 `app/main.py` 启动机器人。
+- `just sync`：同步所有 workspace 包并安装 hooks。
+- `just dev`：启动机器人应用包。
 - `just check`：运行 CI 风格检查。
 - `just test`：运行完整测试链路。
 - `just build`：检查并构建。
@@ -79,15 +82,15 @@ flowchart LR
 
 默认按 `/srv/lst-bot` 和 `/srv/napcat` 设计。
 
-`app/systemd/napcat.container` 是 Podman Quadlet 配置，会生成 `napcat.service`，并把 NapCat 的配置和 QQ 数据放到 `/srv/napcat/config`、`/srv/napcat/ntqq`。
+`systemd/napcat.container` 是 Podman Quadlet 配置，会生成 `napcat.service`，并把 NapCat 的配置和 QQ 数据放到 `/srv/napcat/config`、`/srv/napcat/ntqq`。
 
-`app/systemd/lst-bot.service` 负责启动机器人，工作目录是 `/srv/lst-bot/app`，并在 `napcat.service` 之后启动。
+`systemd/lst-bot.service` 负责启动机器人，工作目录是 `/srv/lst-bot`，并在 `napcat.service` 之后启动。
 
 部署时只需要确认几件事：
 
 1. 项目位于 `/srv/lst-bot`，并已运行 `just sync`。
 2. NapCat 容器已启用，OneBot 11 WebSocket 可连。
-3. `app/.env` 已填好 OneBot、Klei、Gemini、Dosu 和报告群配置。
+3. `.env` 已填好 OneBot、Klei、Gemini、Dosu 和报告群配置。
 4. 需要房间管理时，本机存在 `dst@<room>.service` 这类 DST 房间服务。
 5. 运行用户有权限控制 lst-bot、NapCat 和 DST 房间服务。
 

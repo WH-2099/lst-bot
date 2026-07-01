@@ -1,26 +1,26 @@
 [project]
 name = "lst-bot"
 version = "0.0.0"
-description = "A lightweight modern async bot framework."
+description = "The LST community bot application."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.14"
 dependencies = [
-    "apsw>=3.53.2.0",
-    "croniter>=6.2.2",
-    "diwire>=1.4.2",
     "logbook>=1.9.2",
-    "orjson>=3.11.9",
+    "bot",
+    "hitokoto",
+    "klei",
+    "lst",
     "pydantic>=2.13.4",
     "pydantic-ai-slim[google,mcp]>=1.107.0",
     "pydantic-settings>=2.14.1",
-    "pystemd>=0.13.2",
-    "python-ulid>=3.1.0",
-    "robyn[pydantic]>=0.84.0",
-    "selectolax>=0.4.10",
     "urllib3-future>=2.21.902",
     "uvloop>=0.22.1",
-    "websockets>=16.0",
 ]
+
+[project.scripts]
+lst-bot = "lst_bot.main:main"
 
 [dependency-groups]
 dev = [
@@ -35,6 +35,17 @@ dev = [
 [build-system]
 requires = ['uv_build~=0.11']
 build-backend = 'uv_build'
+
+[tool.uv.workspace]
+members = [
+    "pkgs/*",
+]
+
+[tool.uv.sources]
+bot = { workspace = true }
+hitokoto = { workspace = true }
+klei = { workspace = true }
+lst = { workspace = true }
 
 [tool.ruff]
 fix = true
@@ -63,12 +74,9 @@ ignore = [
 allowed-confusables = ['，', '：', '；', '？', '！', '（', '）']
 
 [tool.ruff.lint.per-file-ignores]
-'app/**' = [
-    'INP001', # App entry files are not package modules.
-]
-
-'tests/**/*.py' = [
+'**/tests/**/*.py' = [
     'S101',    # Assert statements used for pytest.
+    'INP001',  # Colocated tests are plain directories, not import packages.
     'PLR2004', # Magic value used in test cases.
     'PLC2701', # Allow import private members from graphon module.
     'PLC1901', # be more precise about assertion in tests.
@@ -87,5 +95,11 @@ python-platform = "linux"
 [tool.pytest]
 minversion = '9.0'
 addopts = ['-n', '4']
-testpaths = ['tests']
+testpaths = [
+    'tests',
+    'pkgs/bot/tests',
+    'pkgs/hitokoto/tests',
+    'pkgs/klei/tests',
+    'pkgs/lst/tests',
+]
 asyncio_mode = 'auto'
